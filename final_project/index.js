@@ -1,22 +1,48 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const session = require('express-session')
+const session = require('express-session');
 const customer_routes = require('./router/auth_users.js').authenticated;
 const genl_routes = require('./router/general.js').general;
 
 const app = express();
 
+// تمكين قراءة بيانات JSON من الطلبات
 app.use(express.json());
 
-app.use("/customer",session({secret:"fingerprint_customer",resave: true, saveUninitialized: true}))
+// إعداد الجلسة
+app.use("/customer", session({
+    secret: "fingerprint_customer", 
+    resave: true, 
+    saveUninitialized: true
+}));
 
-app.use("/customer/auth/*", function auth(req,res,next){
-//Write the authenication mechanism here
+// آلية المصادقة
+app.use("/customer/auth/*", function auth(req, res, next) {
+    // التحقق من وجود جلسة تحتوي على معلومات المصادقة
+    if (req.session.authorization) {
+        const token = req.session.authorization['accessToken']; // استخراج رمز الوصول
+
+        // التحقق من صحة الرمز باستخدام JWT
+        jwt.verify(token, "fingerprint_customer", (err, user) => {
+            if (!err) {
+                req.user = user; // تخزين بيانات المستخدم في الطلب
+                next(); // السماح بالوصول للنقطة التالية
+            } else {
+                res.status(403).json({ message: "User not authenticated" }); // رفض الوصول
+            }
+        });
+    } else {
+        res.status(403).json({ message: "User not logged in" }); // عدم وجود جلسة صالحة
+    }
 });
- 
-const PORT =5000;
 
+const PORT = 5000;
+
+// توجيه الطلبات إلى نقاط النهاية الخاصة بالمستخدمين المصادق عليهم
 app.use("/customer", customer_routes);
+
+// توجيه الطلبات إلى نقاط النهاية العامة
 app.use("/", genl_routes);
 
-app.listen(PORT,()=>console.log("Server is running"));
+// بدء تشغيل الخادم
+app.listen(PORT, () => console.log("Server is running on port " + PORT));
